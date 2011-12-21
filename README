@@ -1,0 +1,13 @@
+This is an implementation of the Web Socket specification using Adobe AIR.  The approach used is the AIR HTML/JavaScript-based workflow.  That essentially makes this an implementation of Web Sockets using JavaScript.  The server component is designed to be run on the desktop.  The client implementation can be run in any browser supporting RFC-6455 (technically anything better than Hybi-16 will do, such as a recent Chrome build).  
+
+To run the server component you must have the Adobe AIR SDK downloaded and unarchived.  Running the server component from the command line would then look something like the following.
+
+./PATH_TO_AIR/bin/adl PATH_TO_SOURCE/application.xml
+
+With the server component running, point your browser at the "client.html" file.  You will be presented with two buttons.  The button labeled "Open Connection" established a connection to the server component given the default address/port settings.  Once the connection is open, the label of this button will change to "Close Connection".  Clicking this button will disconnect the socket and destroy it.
+
+The other button on the client UI is labeled "Start Feed".  This button will only work if the Web Socket connection has been established.  Clicking on the "Start Feed" button will tell the server to start sending it the latest random numbers.  Those numbers will appear in a chart built using RGraph.  The label on the button will change to "Stop Feed" once clicked.  You can start and stop the feed repeatedly at any time once the connection is open.
+
+For added fun, open a second browser window and point it to "client.html".  Open the connection and start the feed as desired.  The two clients can independently decide when they want to start receiving data from the server.  You can repeat this as many times as you'd like.  Other than machine resources, no connection limits have been put in place.
+
+Note that this is an experiment used to better understand the Web Socket protocol and how the underlying technologies can work together.  With some development it could be used in production, but it is not currently designed for that use-case.  You are welcome to contribute as you see fit to improve the code base such that it might handle more complex scenarios.
