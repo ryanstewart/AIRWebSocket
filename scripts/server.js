@@ -15,25 +15,6 @@ $( document ).ready( function() {
 	var last = null;
 	var states = new Array();
 	
-	numbers = setInterval( function() {
-		last = Math.floor( Math.random() * 99 );
-	}, 50 );
-	
-	clients = setInterval( function() {
-		for( var c = 0; c < connections.length; c++ )
-		{
-			if( states[c].state == 'START' )
-			{
-								// '1000 0001 0000 0011 100'
-				message = last.toString();
-
-				connections[c].writeByte( 129 );
-				connections[c].writeByte( message.length );
-				connections[c].writeUTFBytes( message );
-				connections[c].flush();
-			}
-		}
-	}, 50 );
 	
 	socket.addEventListener( air.ServerSocketConnectEvent.CONNECT, function( evt ) {
 		
@@ -44,7 +25,8 @@ $( document ).ready( function() {
 			var bits = null;
 			var buffer = null;
 			var bytes = new air.ByteArray();
-			var file = air.File.desktopDirectory.resolvePath( 'headers.txt' );
+			var file = air.File.desktopDirectory.resolvePath( 'headers.bin' );
+			var fileafterunmask = air.File.desktopDirectory.resolvePath( 'aftermask.bin' );
 			var mask = null;
 			var message = null;
 			var output = null;
@@ -64,7 +46,7 @@ $( document ).ready( function() {
 			
 			// Capture first byte
 			start = bytes.readUnsignedByte();
-			air.trace( start );
+			air.trace('start: ' + start );
 		
 			// HTTP GET means opening a socket
 			if( start == 71 )
@@ -72,7 +54,7 @@ $( document ).ready( function() {
 				bytes.position = 0;
 				response = handshake( bytes );
 				
-				air.trace( response );
+				air.trace('response: ' + response );
 				
 				output = 
 					'HTTP/1.1 101 Switching Protocols\r\n' +
@@ -82,7 +64,7 @@ $( document ).ready( function() {
 					'\r\n';
 				
 				air.trace( output );
-				evt.currentTarget.writeUTFBytes( output );	
+				evt.currentTarget.writeUTFBytes( output );
 				evt.currentTarget.flush();						
 			} else {
 				air.trace( start.toString( 2 ).substr( 4, 4 ) );				
@@ -135,6 +117,8 @@ $( document ).ready( function() {
 						{
 							buffer.push( bytes.readUnsignedByte() );
 						}
+						
+
 
 						air.trace( 'Payload: ' + buffer.length );
 
@@ -147,32 +131,99 @@ $( document ).ready( function() {
 							message = message + String.fromCharCode( buffer[i] );
     					}
 						
-						air.trace( 'Message: ' + message );						
-						
-						if( message == 'START' )
+						air.trace( 'Message: ' + message );		
+
+						for( var c = 0; c < connections.length; c++ )
 						{
-							for( var c = 0; c < connections.length; c++ ) 
-							{
-								if( connections[c] == evt.currentTarget )
-								{
-									air.trace( 'Found start match' );
-									states[c].state = 'START';
-									break;
-								}
-							}
-						} else if( message == 'STOP' ) {
-							for( var c = 0; c < connections.length; c++ ) 
-							{
-								if( connections[c] == evt.currentTarget )
-								{
-									air.trace( 'Found stop match' );
-									states[c].state = 'STOP';
-									break;
-								}
-							}
+
+								connections[c].writeByte( 129 );
+								connections[c].writeByte( message.length );
+								connections[c].writeUTFBytes( message );
+								connections[c].flush();
 						}
 
 						break;
+						
+					case BINARY_FRAME:
+							air.trace( 'Binary message' );
+								
+							air.trace('bytelength: ' + bytes.length);
+
+							// This was really helpful.
+							// http://stackoverflow.com/questions/8125507/how-can-i-send-and-receive-websocket-messages-on-the-server-side
+
+							
+							available = bytes.readUnsignedByte();
+							available = parseInt( available.toString( 2 ).substr( 1, 7 ), 2 );
+							
+							if( available == 126 ) {
+								available = bytes.readUnsignedShort();	
+							} else if( available == 127 ) {
+								available = bytes.readDouble();
+							}
+
+							air.trace( 'Length: ' + available );
+												
+							
+							// Mask
+							mask = new Array();
+							mask[0] = bytes.readUnsignedByte();
+							mask[1] = bytes.readUnsignedByte();
+							mask[2] = bytes.readUnsignedByte();
+							mask[3] = bytes.readUnsignedByte();
+							
+							// Payload
+							buffer = new air.ByteArray();
+
+							// buffer = new Array();
+
+							air.trace('position: ' + bytes.position);
+
+							for( var d = bytes.position; d < bytes.length; d++ )
+							{
+								buffer[d] = bytes.readUnsignedByte();
+							}
+							
+
+
+							air.trace( 'Payload: ' + buffer.length );
+
+							// Unmask
+							for( var i = 0; i < buffer.length; i++ ) 
+							{
+								buffer[i] ^= mask[i % 4];
+							}
+
+
+	    					// var message = btoa(buffer);
+	    					// var tostringmessage = buffer.toString();
+
+	    					// air.trace('messagelength: ' + message.length);
+	    					// air.trace('tostringmessage: ' + tostringmessage);
+
+							buffer.position = 0;
+							stream.open( fileafterunmask, air.FileMode.WRITE );
+							stream.writeBytes( buffer, 0, buffer.length );
+							stream.close();
+							buffer.position = 0;
+
+
+							// TODO: Make this more robust, right now it's hardcoded at 126.
+							// 	I need to also support 127 and what I think will be writeInt()
+
+							for( var c = 0; c < connections.length; c++ )
+							{							
+								connections[c].writeByte(130);
+								connections[c].writeByte(126);
+								connections[c].writeShort(buffer.length);
+								connections[c].writeBytes( buffer );
+								connections[c].flush();
+								// connections[c].writeByte(130);
+								// connections[c].writeDouble(buffer.length);
+								// connections[c].writeBytes( buffer );
+								// connections[c].flush();
+							}
+						break;						
 				}
 			}
 		} );	
@@ -186,6 +237,7 @@ $( document ).ready( function() {
 		air.trace( connections.length );
 		
 	} );
+
 	
 	// Configuration file
 	config = air.File.applicationDirectory.resolvePath( 'configuration.xml' );
